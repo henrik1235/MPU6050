@@ -1,0 +1,17 @@
+{
+  "name": "MPU6050",
+  "keywords": "gyroscope, accelerometer, compass, sensor, i2cdevlib, i2c",
+  "description": "The MPU-6050 devices combine a 3-axis gyroscope and a 3-axis accelerometer",
+  "include": "Arduino/MPU6050",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/henrik1235/MPU6050.git"
+  },
+  "dependencies":
+  {
+    "name": "I2Cdevlib-Core",
+    "frameworks": "arduino"
+  },
+  "frameworks": "arduino"
+}
