@@ -1755,28 +1755,6 @@ bool MPU6050::getIntDataReadyStatus() {
     return buffer[0];
 }
 
-// ACCEL_*OUT_* registers
-
-/** Get raw 9-axis motion sensor readings (accel/gyro/compass).
- * FUNCTION NOT FULLY IMPLEMENTED YET.
- * @param ax 16-bit signed integer container for accelerometer X-axis value
- * @param ay 16-bit signed integer container for accelerometer Y-axis value
- * @param az 16-bit signed integer container for accelerometer Z-axis value
- * @param gx 16-bit signed integer container for gyroscope X-axis value
- * @param gy 16-bit signed integer container for gyroscope Y-axis value
- * @param gz 16-bit signed integer container for gyroscope Z-axis value
- * @param mx 16-bit signed integer container for magnetometer X-axis value
- * @param my 16-bit signed integer container for magnetometer Y-axis value
- * @param mz 16-bit signed integer container for magnetometer Z-axis value
- * @see getMotion6()
- * @see getAcceleration()
- * @see getRotation()
- * @see MPU6050_RA_ACCEL_XOUT_H
- */
-bool MPU6050::getMotion9(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz, int16_t* mx, int16_t* my, int16_t* mz) {
-    return getMotion6(ax, ay, az, gx, gy, gz);
-    // TODO: magnetometer integration
-}
 /** Get raw 6-axis motion sensor readings (accel/gyro).
  * Retrieves all currently available motion sensor values.
  * @param ax 16-bit signed integer container for accelerometer X-axis value
@@ -1800,6 +1778,32 @@ bool MPU6050::getMotion6(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int
     *gz = (((int16_t)buffer[12]) << 8) | buffer[13];
 	return true;
 }
+
+bool MPU6050::getMotion6(int16_t* values) {
+	return getMotion6(values, values + 1, values + 2, values + 3, values + 4, values + 5);
+}
+
+bool MPU6050::getAverageMotion6(int16_t* values) {	
+	float sum[6];
+
+	int count = 0;
+	for (int i = 0; i < 50; i++) {
+		int16_t temp[6];
+		if (getMotion6(temp)) {
+			for (int i = 0; i < 6; i++)
+				sum[i] += temp[i];
+			count++;
+		}
+		delay(10);
+	}
+
+	for (int i = 0; i < 6; i++)
+		values[i] = (int16_t)(sum[i] / count);
+	return true;
+}
+
+// ACCEL_*OUT_* registers
+
 /** Get 3-axis accelerometer readings.
  * These registers store the most recent accelerometer measurements.
  * Accelerometer measurements are written to these registers at the Sample Rate
@@ -3219,6 +3223,10 @@ void MPU6050::setDMPConfig2(uint8_t config) {
 }
 
 bool MPU6050::selfTest(float* result) {
+	// Result of -1000 indicates failure with communication
+	for (int i = 0; i < 6; i++)
+		result[i] = -1000;
+
 	bool ok = true;
 	// Save settings
 	I2Cdev::readByte(devAddr, MPU6050_RA_ACCEL_CONFIG, buffer);
@@ -3234,14 +3242,14 @@ bool MPU6050::selfTest(float* result) {
 	delay(30);
 
 	int16_t before[6];
-	if (getMotion6(before, before + 1, before + 2, before + 3, before + 4, before + 5)) {
+	if (getAverageMotion6(before)) {
 		// Enable self test and set settings (8g, 250dps)
 		I2Cdev::writeByte(devAddr, MPU6050_RA_ACCEL_CONFIG, 0xF0);
 		I2Cdev::writeByte(devAddr, MPU6050_RA_GYRO_CONFIG, 0xE0);
 		delay(30);
 
 		int16_t after[6];
-		if (getMotion6(after, after + 1, after + 2, after + 3, after + 4, after + 5)) {
+		if (getAverageMotion6(after)) {
 			// Read factory trim
 			I2Cdev::readBytes(devAddr, MPU6050_RA_SELF_TEST_X, 4, buffer);
 
@@ -3260,9 +3268,9 @@ bool MPU6050::selfTest(float* result) {
 			factoryTrim[0] = 4096.0f*0.34f * pow(0.92 / 0.34, ((float)selfTest[0] - 1.0f) / 30.0f); // FT[Xa] factory trim calculation
 			factoryTrim[1] = 4096.0f*0.34f * pow(0.92 / 0.34, ((float)selfTest[1] - 1.0f) / 30.0f); // FT[Ya] factory trim calculation
 			factoryTrim[2] = 4096.0f*0.34f * pow(0.92 / 0.34, ((float)selfTest[2] - 1.0f) / 30.0f); // FT[Za] factory trim calculation
-			factoryTrim[3] = 25.0f*131.0f * pow(1.046, (float)selfTest[3] - 1.0f);             // FT[Xg] factory trim calculation
-			factoryTrim[4] = -25.0f*131.0f * pow(1.046, (float)selfTest[4] - 1.0f);             // FT[Yg] factory trim calculation
-			factoryTrim[5] = 25.0f*131.0f * pow(1.046, (float)selfTest[5] - 1.0f);             // FT[Zg] factory trim calculation
+			factoryTrim[3] = 25.0f*131.0f * pow(1.046, (float)selfTest[3] - 1.0f);					// FT[Xg] factory trim calculation
+			factoryTrim[4] = -25.0f*131.0f * pow(1.046, (float)selfTest[4] - 1.0f);					// FT[Yg] factory trim calculation
+			factoryTrim[5] = 25.0f*131.0f * pow(1.046, (float)selfTest[5] - 1.0f);					// FT[Zg] factory trim calculation
 
 			for (int i = 0; i < 6; i++)
 				result[i] = 100.0 * ((float)(after[i] - before[i]) - factoryTrim[i]) / factoryTrim[i];
